@@ -41,7 +41,7 @@ livestats10_list = []
 PICKRATE_EXCLUSION = 1.0
 
 
-class DATA(IntEnum):
+class INDEX(IntEnum):
     NAME = 0
     PICKRATE = 1
     WINRATE = 2
@@ -57,7 +57,7 @@ async def on_ready():
     global livestats3_list, livestats7_list, livestats10_list
 
     livestats3_list = await get_livestats(livestats_addr + "3")
-    livestats7_lsit = await get_livestats(livestats_addr + "7")
+    livestats7_list = await get_livestats(livestats_addr + "7")
     livestats10_list = await get_livestats(livestats_addr + "10")
 
 
@@ -133,17 +133,17 @@ async def sort_livedata(param, datalist, comms_list):
 
     base = -1
 
-    if param == comms_list[DATA.PICKRATE]:
-        datalist.sort(key=lambda x: x[DATA.PICKRATE], reverse=True)
-        base = DATA.PICKRATE
-    elif param == comms_list[DATA.WINRATE]:
-        datalist.sort(key=lambda x: x[DATA.WINRATE], reverse=True)
-        base = DATA.WINRATE
-    elif param == comms_list[DATA.TOPTHREE]:
-        datalist.sort(key=lambda x: x[DATA.TOPTHREE], reverse=True)
-        base = DATA.TOPTHREE
+    if param == comms_list[INDEX.PICKRATE]:
+        datalist.sort(key=lambda x: x[INDEX.PICKRATE], reverse=True)
+        base = INDEX.PICKRATE
+    elif param == comms_list[INDEX.WINRATE]:
+        datalist.sort(key=lambda x: x[INDEX.WINRATE], reverse=True)
+        base = INDEX.WINRATE
+    elif param == comms_list[INDEX.TOPTHREE]:
+        datalist.sort(key=lambda x: x[INDEX.TOPTHREE], reverse=True)
+        base = INDEX.TOPTHREE
 
-    datalist = [x for x in datalist if float(x[DATA.PICKRATE].strip('%')) >= PICKRATE_EXCLUSION]
+    datalist = [x for x in datalist if float(x[INDEX.PICKRATE].strip('%')) >= PICKRATE_EXCLUSION]
 
     for elem in datalist:
         elem[base] = elem[base]  # 디스코드 Bold Text 명령어

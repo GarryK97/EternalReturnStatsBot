@@ -183,10 +183,11 @@ async def get_livestats(day):
     response = requests.get(stats_url)
     tries = 0
     MAX_TRY = 5
+    WAIT_SECOND = 3
     while response.status_code != 200 and tries <= MAX_TRY:
         response = requests.get(stats_url)
         tries += 1
-        await asyncio.sleep(10)  # Wait for some seconds so that API can handle something
+        await asyncio.sleep(WAIT_SECOND)  # Wait for some seconds so that API can handle something
 
     if tries > MAX_TRY:
         return []   # Means the API is struggling and can't fetch any data

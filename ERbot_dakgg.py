@@ -155,7 +155,6 @@ async def print_rankbased(ctx, sorted_list, start, end):
     output = "```" + tabulate.tabulate(sorted_list[start:end+1], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1,end+2)) + "```"
     output += f"**참고** : 픽률 {PICKRATE_EXCLUSION}% 미만의 실험체는 제외한 결과입니다."
     await ctx.send(output)
-    print(output)
 
 # ----------------- 시간단축용 함수들 (끝) ----------------------
 

@@ -19,7 +19,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # ---------------- 명령어 및 기본 변수 정리 ---------------------------
 
 # 새 명령어 추가시 이 리스트들도 수정필수
-comms_live_list = ["이름", "픽률", "승률", "순방"]    # The index can be referred from DATA enum class (and must keep this order)
+comms_live_list = ["이름", "픽률", "승률", "순방"]    # The index can be referred from INDEX enum class (and must keep this order)
 comms_day_list = ['3', '7', '10']
 
 comms_live_string = f"실시간통계 ({','.join(comms_live_list)}) ({','.join(comms_day_list)})"
@@ -49,9 +49,103 @@ class INDEX(IntEnum):
 
 
 character_names_dict = \
-{
+    {
+        1:"재키",
+        2:"아야",
+        3:"피오라",
+        4:"매그너스",
+        5:"자히르",
+        6:"나딘",
+        7:"현우",
+        8:"하트",
+        9:"아이솔",
+        10:"리 다이린",
+        11:"유키",
+        12:"혜진",
+        13:"쇼우",
+        14:"키아라",
+        15:"시셀라",
+        16:"실비아",
+        17:"아드리아나",
+        18:"쇼이치",
+        19:"엠마",
+        20:"레녹스",
+        21:"로지",
+        22:"루크",
+        23:"캐시",
+        24:"아델라",
+        25:"버니스",
+        26:"바바라",
+        27:"알렉스",
+        28:"수아",
+        29:"레온",
+        30:"일레븐",
+        31:"리오",
+        32:"윌리엄",
+        33:"니키",
+        34:"나타폰",
+        35:"얀",
+        36:"이바",
+        37:"다니엘",
+        38:"제니",
+        39:"카밀로",
+        40:"클로에",
+        41:"요한",
+        42:"비앙카",
+        43:"셀린",
+        44:"에키온",
+        45:"마이",
+        46:"에이든",
+        47:"라우라",
+        48:"띠아",
+        49:"펠릭스",
+        50:"엘레나",
+        51:"프리야",
+        52:"아디나",
+        53:"마커스",
+        54:"칼라",
+        55:"에스텔",
+        56:"피올로",
+        57:"마르티나",
+        58:"헤이즈",
+        59:"아이작",
+        60:"타지아",
+        61:"이렘",
+        62:"테오도르",
+        63:"이안",
+        64:"바냐",
+        65:"데비&마를렌",
+        66:"아르다",
+        67:"아비게일"
+    }
 
-}
+weapon_names_dict = \
+    {
+        1:"글러브",
+        2:"톤파",
+        3:"방망이",
+        4:"채찍",
+        5:"투척",
+        6:"암기",
+        7:"활",
+        8:"석궁",
+        9:"권총",
+        10:"돌격소총",
+        11:"저격총",
+        13:"망치",
+        14:"도끼",
+        15:"단검",
+        16:"양손검",
+        17:"폴암",
+        18:"쌍검",
+        19:"창",
+        20:"쌍절곤",
+        21:"레이피어",
+        22:"기타",
+        23:"카메라",
+        24:"아르카나",
+        25:"VF의수"
+    }
 
 
 # ----------------- 프로그램용 함수들 ----------------------
@@ -132,17 +226,17 @@ async def sort_livedata(param, datalist, comms_list):
 
     base = -1
 
-    if param == comms_list[DATA.PICKRATE]:
-        datalist.sort(key=lambda x: x[DATA.PICKRATE], reverse=True)
-        base = DATA.PICKRATE
-    elif param == comms_list[DATA.WINRATE]:
-        datalist.sort(key=lambda x: x[DATA.WINRATE], reverse=True)
-        base = DATA.WINRATE
-    elif param == comms_list[DATA.TOPTHREE]:
-        datalist.sort(key=lambda x: x[DATA.TOPTHREE], reverse=True)
-        base = DATA.TOPTHREE
+    if param == comms_list[INDEX.PICKRATE]:
+        datalist.sort(key=lambda x: x[INDEX.PICKRATE], reverse=True)
+        base = INDEX.PICKRATE
+    elif param == comms_list[INDEX.WINRATE]:
+        datalist.sort(key=lambda x: x[INDEX.WINRATE], reverse=True)
+        base = INDEX.WINRATE
+    elif param == comms_list[INDEX.TOPTHREE]:
+        datalist.sort(key=lambda x: x[INDEX.TOPTHREE], reverse=True)
+        base = INDEX.TOPTHREE
 
-    datalist = [x for x in datalist if float(x[DATA.PICKRATE].strip('%')) >= PICKRATE_EXCLUSION]
+    datalist = [x for x in datalist if float(x[INDEX.PICKRATE].strip('%')) >= PICKRATE_EXCLUSION]
 
     for elem in datalist:
         elem[base] = elem[base]  # 디스코드 Bold Text 명령어
@@ -152,7 +246,7 @@ async def sort_livedata(param, datalist, comms_list):
 
 async def print_rankbased(ctx, sorted_list, start, end):
     output = "```" + tabulate.tabulate(sorted_list[start:end+1], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1,end+2)) + "```"
-    output += f"**참고** : 픽률 {PICKRATE_EXCLUSION}% 미만의 실험체는 제외한 결과입니다."
+    output += f"**참고** 픽률 {PICKRATE_EXCLUSION}% 미만의 실험체는 제외한 결과입니다."
     await ctx.send(output)
 
 # ----------------- 시간단축용 함수들 (끝) ----------------------

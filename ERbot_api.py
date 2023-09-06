@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 import os
 from enum import IntEnum
 import tabulate
+import requests
+import asyncio
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -17,7 +19,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # ---------------- 명령어 및 기본 변수 정리 ---------------------------
 
 # 새 명령어 추가시 이 리스트들도 수정필수
-comms_live_list = ["이름", "픽률", "승률", "순방"]    # Enum 과 통일되도록 만듬
+comms_live_list = ["이름", "픽률", "승률", "순방"]    # The index can be referred from DATA enum class (and must keep this order)
 comms_day_list = ['3', '7', '10']
 
 comms_live_string = f"실시간통계 ({','.join(comms_live_list)}) ({','.join(comms_day_list)})"
@@ -26,8 +28,8 @@ comms_personal_string = "개인통계 닉네임"
 notfound_live_string = f"명령어 확인 불가\n명령어: {comms_live_string}"
 notfound_personal_string = f"명령어 확인 불가\n명령어: {comms_personal_string}"
 
-main_addr = "https://dak.gg/er/"  # 통계주소로 사용할 메인주소
-livestats_addr = "statistics?teamMode=SQUAD&type=REALTIME_OVER_DIAMOND&period="
+main_addr = "https://er.dakgg.io/v1/"  # Main api address
+livestats_addr = "statistics/realtime?teamMode=SQUAD&type=REALTIME_OVER_DIAMOND&period=DAYS"
 personal_addr = "players/"
 
 # 이름, 픽률, 승률, 순방 순서로 정리됨
@@ -38,11 +40,19 @@ livestats10_list = []
 PICKRATE_EXCLUSION = 1.0
 
 
-class DATA(IntEnum):
+# Enum class for easier indexing
+class INDEX(IntEnum):
     NAME = 0
     PICKRATE = 1
     WINRATE = 2
     TOPTHREE = 3
+
+
+character_names_dict = \
+{
+
+}
+
 
 # ----------------- 프로그램용 함수들 ----------------------
 
@@ -53,14 +63,10 @@ async def on_ready():
 
     global livestats3_list, livestats7_list, livestats10_list
 
+    # Gets all data and remembers the data when bot starts (for fast processing)
     livestats3_list = await get_livestats(livestats_addr + "3")
-    livestats7_lsit = await get_livestats(livestats_addr + "7")
+    livestats7_list = await get_livestats(livestats_addr + "7")
     livestats10_list = await get_livestats(livestats_addr + "10")
-
-
-# @update_stats.before_loop
-# async def before_my_task():
-#     await bot.wait_until_ready()  # wait until the bot logs in
 
 # --- 유저 입력 대기하고, 장기간 대기시 봇 종료
 # async def wait_for_user_content(ctx):
@@ -89,40 +95,36 @@ async def on_ready():
 
 @tasks.loop(minutes=60)
 async def get_livestats(stats_url):
-    options = webdriver.ChromeOptions()
-    # options.add_experimental_option("detach", True)   # 창 계속 띄워놓기 (디버그용)
-    options.add_argument("headless")  # 디버그할땐 주석해서 비활성화
-    driver = webdriver.Chrome('C:\chromedriver_win32\chromedriver.exe', options=options)
-    driver.implicitly_wait(10)
+    response = requests.get(main_addr + stats_url)
+    tries = 0
+    MAX_TRY = 5
+    while response.status_code != 200 and tries <= MAX_TRY:
+        response = requests.get(main_addr + stats_url)
+        tries += 1
+        await asyncio.sleep(10)  # Wait for some seconds so that API can handle something
 
-    try:
-        driver.get(main_addr + stats_url)
-    except: # 접속 장애, 홈페이지 문제등 오류 발생시
-        driver.quit()
-        print(f"닥지지 홈페이지 접속 장애 발생중 ----- {datetime.now().strftime('%H:%M')}")
-        return
+    if tries > MAX_TRY:
+        return []   # Means the API is struggling and can't fetch any data
 
-    html = driver.page_source
-    soup = BeautifulSoup(html, 'html.parser')
-    all_subjects_data = soup.find_all("tr", {"class" : "border border border-t-0 border-[#e6e6e6]"})
-
-    subjects_data = []
-    for each_element in all_subjects_data:
-        name = each_element.find("a", {"class" : "keep-all text-left hover:underline"}).text
-        pickrate = each_element.find("td", {"class" : "p-[8px] text-center bg-[#f5f5f5] font-bold text-black"}).contents[0].text
-        winrate = each_element.find("td", {"class" : "font-bold p-[8px] text-center"}).text
-        topthree = each_element.find_all("td", {"class" : "p-[8px] text-center"})[2].text
-
-        if '-' not in [pickrate, winrate, topthree]:
-            subjects_data.append([name, pickrate, winrate, topthree])
-
-    return subjects_data
+    livestats_json = response.json()
 
 
-async def check_input(userinput, comms_list):
-    if userinput not in comms_list:
-        return False
-    return True
+
+    # subjects_data = []
+    # subjects_data.append([name, pickrate, winrate, topthree])
+
+    # return subjects_data
+
+
+@get_livestats.before_loop
+async def before_my_task():
+    await bot.wait_until_ready()  # wait until the bot logs in
+
+
+# async def check_input(userinput, comms_list):
+#     if userinput not in comms_list:
+#         return False
+#     return True
 
 
 async def sort_livedata(param, datalist, comms_list):

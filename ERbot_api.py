@@ -37,7 +37,7 @@ livestats3_list = []
 livestats7_list = []
 livestats10_list = []
 
-PICKRATE_EXCLUSION = 1.0
+PICKRATE_EXCLUSION = 0.01
 
 
 # Enum class for easier indexing
@@ -150,18 +150,6 @@ weapon_names_dict = \
 
 # ----------------- 프로그램용 함수들 ----------------------
 
-@bot.event
-async def on_ready():
-    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    print('------')
-
-    global livestats3_list, livestats7_list, livestats10_list
-
-    # Gets all data and remembers the data when bot starts (for fast processing)
-    livestats3_list = await get_livestats(livestats_addr + "3")
-    livestats7_list = await get_livestats(livestats_addr + "7")
-    livestats10_list = await get_livestats(livestats_addr + "10")
-
 # --- 유저 입력 대기하고, 장기간 대기시 봇 종료
 # async def wait_for_user_content(ctx):
 #     timeout = 20
@@ -186,14 +174,17 @@ async def on_ready():
 #     except:
 #         await ctx.send("!!데이터 수정중 오류가 발생했습니다!!")
 
-
 @tasks.loop(minutes=60)
-async def get_livestats(stats_url):
-    response = requests.get(main_addr + stats_url)
+async def get_livestats(day):
+    global main_addr, livestats_addr
+
+    stats_url = main_addr + livestats_addr + day
+
+    response = requests.get(stats_url)
     tries = 0
     MAX_TRY = 5
     while response.status_code != 200 and tries <= MAX_TRY:
-        response = requests.get(main_addr + stats_url)
+        response = requests.get(stats_url)
         tries += 1
         await asyncio.sleep(10)  # Wait for some seconds so that API can handle something
 
@@ -201,18 +192,23 @@ async def get_livestats(stats_url):
         return []   # Means the API is struggling and can't fetch any data
 
     livestats_json = response.json()
+    livestats_rawdata = livestats_json.get("statistics")
 
+    processed_data = []
+    for row in livestats_rawdata:
+        subject_name = character_names_dict[row.get("characterId")]
+        subject_weapon = weapon_names_dict[row.get("weaponTypeId")]
 
+        name = subject_weapon + " " + subject_name
+        pickrate = row.get("pickRate")
+        winrate = row.get("winRate")
 
-    # subjects_data = []
-    # subjects_data.append([name, pickrate, winrate, topthree])
+        pick_count = row.get("pickCount")
+        if pick_count != 0:
+            topthree = row.get("top3Count") / pick_count
+            processed_data.append([name, pickrate, winrate, topthree])
 
-    # return subjects_data
-
-
-@get_livestats.before_loop
-async def before_my_task():
-    await bot.wait_until_ready()  # wait until the bot logs in
+    return processed_data
 
 
 # async def check_input(userinput, comms_list):
@@ -221,38 +217,71 @@ async def before_my_task():
 #     return True
 
 
+async def fetch_all_livedata():
+    global livestats3_list, livestats7_list, livestats10_list, livestats_addr
+
+    livestats3_list = await get_livestats("3")
+    livestats7_list = await get_livestats("7")
+    livestats10_list = await get_livestats("10")
+
+
 async def sort_livedata(param, datalist, comms_list):
     global PICKRATE_EXCLUSION
 
-    base = -1
+    # base = -1
 
     if param == comms_list[INDEX.PICKRATE]:
         datalist.sort(key=lambda x: x[INDEX.PICKRATE], reverse=True)
-        base = INDEX.PICKRATE
+        # base = INDEX.PICKRATE
     elif param == comms_list[INDEX.WINRATE]:
         datalist.sort(key=lambda x: x[INDEX.WINRATE], reverse=True)
-        base = INDEX.WINRATE
+        # base = INDEX.WINRATE
     elif param == comms_list[INDEX.TOPTHREE]:
         datalist.sort(key=lambda x: x[INDEX.TOPTHREE], reverse=True)
-        base = INDEX.TOPTHREE
+        # base = INDEX.TOPTHREE
 
-    datalist = [x for x in datalist if float(x[INDEX.PICKRATE].strip('%')) >= PICKRATE_EXCLUSION]
+    # 특정 픽률보다 낮은 실험체는 통계에서 제외 (너무 적어서 무의미한 통계라고 판단 (주관적))
+    datalist = [x for x in datalist if x[INDEX.PICKRATE] >= PICKRATE_EXCLUSION]
 
-    for elem in datalist:
-        elem[base] = elem[base]  # 디스코드 Bold Text 명령어
+    # for elem in datalist:
+    #     elem[base] = elem[base]  # 디스코드 Bold Text 명령어
 
     return datalist
 
 
 async def print_rankbased(ctx, sorted_list, start, end):
+    for i in range(len(sorted_list)):
+        sorted_list[i][INDEX.PICKRATE] = str(round(sorted_list[i][INDEX.PICKRATE] * 100, 1)) + '%'
+        sorted_list[i][INDEX.WINRATE] = str(round(sorted_list[i][INDEX.WINRATE] * 100, 1)) + '%'
+        sorted_list[i][INDEX.TOPTHREE] = str(round(sorted_list[i][INDEX.TOPTHREE] * 100, 1)) + '%'
+
     output = "```" + tabulate.tabulate(sorted_list[start:end+1], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1,end+2)) + "```"
-    output += f"**참고** 픽률 {PICKRATE_EXCLUSION}% 미만의 실험체는 제외한 결과입니다."
+    output += f"**참고** 픽률 {int(PICKRATE_EXCLUSION * 100)}% 미만의 실험체는 제외한 결과입니다."
     await ctx.send(output)
 
-# ----------------- 시간단축용 함수들 (끝) ----------------------
+# ----------------- 프로그램용 함수들 (끝) ----------------------
 
 
 # ----------------- 봇 명령어 ------------------------
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    print('------')
+
+    print("Fetching Live Statistics...")
+
+    # Gets all data and remembers the data when bot starts (for fast processing)
+    await asyncio.gather(fetch_all_livedata())  # waits to finish all live stats fetch operations
+
+    print("FINISHED")
+    print("------")
+
+
+@get_livestats.before_loop
+async def before_my_task():
+    await bot.wait_until_ready()  # wait until the bot logs in
+
+
 @bot.command()
 async def 명령어(ctx):
     await ctx.send(comms_live_string)

@@ -16,6 +16,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+load_dotenv('config.env')
+
 # ---------------- 명령어 및 기본 변수 정리 ---------------------------
 
 # 새 명령어 추가시 이 리스트들도 수정필수
@@ -28,9 +30,13 @@ comms_personal_string = "개인통계 닉네임"
 notfound_live_string = f"명령어 확인 불가\n명령어: {comms_live_string}"
 notfound_personal_string = f"명령어 확인 불가\n명령어: {comms_personal_string}"
 
-main_addr = "https://er.dakgg.io/v1/"  # Main api address
+mainstats_addr = "https://er.dakgg.io/v1/"  # Main api address for getting statistics (DAK.GG API)
 livestats_addr = "statistics/realtime?teamMode=SQUAD&type=REALTIME_OVER_DIAMOND&period=DAYS"
 personal_addr = "players/"
+
+mainapi_addr = "https://open-api.bser.io/v1/"   # Official api address
+mainapi_headers = {'x-api-key': os.getenv('API_KEY')}  # API Key header
+
 
 # 이름, 픽률, 승률, 순방 순서로 정리됨
 livestats3_list = []
@@ -176,9 +182,9 @@ weapon_names_dict = \
 
 @tasks.loop(minutes=60)
 async def get_livestats(day):
-    global main_addr, livestats_addr
+    global mainstats_addr, livestats_addr
 
-    stats_url = main_addr + livestats_addr + day
+    stats_url = mainstats_addr + livestats_addr + day
 
     response = requests.get(stats_url)
     tries = 0
@@ -307,5 +313,4 @@ async def 실시간통계(ctx, *param):
 # ----------------- 봇 명령어 (끝) ------------------------
 
 ### ------------ Main ------------ ###
-load_dotenv('config.env')
 bot.run(os.getenv("BOT_TOKEN"))

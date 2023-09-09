@@ -15,14 +15,14 @@ import asyncio
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
-
 load_dotenv('config.env')
 
 # ---------------- 명령어 및 기본 변수 정리 ---------------------------
 
 # 새 명령어 추가시 이 리스트들도 수정필수
-comms_live_list = ["이름", "픽률", "승률", "순방"]    # The index can be referred from INDEX enum class (and must keep this order)
+comms_live_list = ["이름", "픽률", "승률", "순방"]    # The index can be referred from LIVE_INDEX enum class (and must keep this order)
 comms_day_list = ['3', '7', '10']
+comms_live_param_list = ["제외", "전체"]
 
 comms_live_string = f"실시간통계 ({','.join(comms_live_list)}) ({','.join(comms_day_list)})"
 comms_personal_string = "개인통계 닉네임"
@@ -46,12 +46,24 @@ livestats10_list = []
 PICKRATE_EXCLUSION = 0.01
 
 
-# Enum class for easier indexing
-class INDEX(IntEnum):
+# Enum class for comms_live_list (The index must match with the list)
+class LIVE_INDEX(IntEnum):
     NAME = 0
     PICKRATE = 1
     WINRATE = 2
     TOPTHREE = 3
+
+
+class DAY_INDEX(IntEnum):
+    THREE = 0
+    SEVEN = 1
+    TEN = 2
+
+
+# Enum class for comms_live_param_list
+class LIVE_PARAM_INDEX(IntEnum):
+    EXCLUDE = 0
+    INCLUDE = 1
 
 
 character_names_dict = \
@@ -235,35 +247,35 @@ async def fetch_all_livedata():
 async def sort_livedata(param, datalist, comms_list):
     global PICKRATE_EXCLUSION
 
-    # base = -1
-
-    if param == comms_list[INDEX.PICKRATE]:
-        datalist.sort(key=lambda x: x[INDEX.PICKRATE], reverse=True)
-        # base = INDEX.PICKRATE
-    elif param == comms_list[INDEX.WINRATE]:
-        datalist.sort(key=lambda x: x[INDEX.WINRATE], reverse=True)
-        # base = INDEX.WINRATE
-    elif param == comms_list[INDEX.TOPTHREE]:
-        datalist.sort(key=lambda x: x[INDEX.TOPTHREE], reverse=True)
-        # base = INDEX.TOPTHREE
-
-    # 특정 픽률보다 낮은 실험체는 통계에서 제외 (너무 적어서 무의미한 통계라고 판단 (주관적))
-    datalist = [x for x in datalist if x[INDEX.PICKRATE] >= PICKRATE_EXCLUSION]
-
-    # for elem in datalist:
-    #     elem[base] = elem[base]  # 디스코드 Bold Text 명령어
+    if param == comms_list[LIVE_INDEX.PICKRATE]:
+        datalist.sort(key=lambda x: x[LIVE_INDEX.PICKRATE], reverse=True)
+    elif param == comms_list[LIVE_INDEX.WINRATE]:
+        datalist.sort(key=lambda x: x[LIVE_INDEX.WINRATE], reverse=True)
+    elif param == comms_list[LIVE_INDEX.TOPTHREE]:
+        datalist.sort(key=lambda x: x[LIVE_INDEX.TOPTHREE], reverse=True)
 
     return datalist
 
 
-async def print_rankbased(ctx, sorted_list, start, end):
+# 특정 픽률보다 낮은 실험체는 통계에서 제외 (너무 적어서 무의미한 통계라고 판단 (주관적))
+# PICKRATE_EXCLSUION 보다 낮은 픽률은 모두 제외됨.
+async def exclude_lowpick(datalist):
+    datalist = [x for x in datalist if x[LIVE_INDEX.PICKRATE] >= PICKRATE_EXCLUSION]
+    return datalist
+
+
+async def print_rankbased(ctx, sorted_list, start, end, is_pick_excluded):
+    if is_pick_excluded:
+        sorted_list = await exclude_lowpick(sorted_list)
+
     for i in range(len(sorted_list)):
-        sorted_list[i][INDEX.PICKRATE] = str(round(sorted_list[i][INDEX.PICKRATE] * 100, 1)) + '%'
-        sorted_list[i][INDEX.WINRATE] = str(round(sorted_list[i][INDEX.WINRATE] * 100, 1)) + '%'
-        sorted_list[i][INDEX.TOPTHREE] = str(round(sorted_list[i][INDEX.TOPTHREE] * 100, 1)) + '%'
+        sorted_list[i][LIVE_INDEX.PICKRATE] = str(round(sorted_list[i][LIVE_INDEX.PICKRATE] * 100, 1)) + '%'
+        sorted_list[i][LIVE_INDEX.WINRATE] = str(round(sorted_list[i][LIVE_INDEX.WINRATE] * 100, 1)) + '%'
+        sorted_list[i][LIVE_INDEX.TOPTHREE] = str(round(sorted_list[i][LIVE_INDEX.TOPTHREE] * 100, 1)) + '%'
 
     output = "```" + tabulate.tabulate(sorted_list[start:end+1], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1,end+2)) + "```"
-    output += f"**참고** 픽률 {int(PICKRATE_EXCLUSION * 100)}% 미만의 실험체는 제외한 결과입니다."
+    if is_pick_excluded:
+        output += f"**참고** 픽률 {int(PICKRATE_EXCLUSION * 100)}% 미만의 실험체는 제외한 결과입니다."
     await ctx.send(output)
 
 # ----------------- 프로그램용 함수들 (끝) ----------------------
@@ -301,11 +313,16 @@ async def 실시간통계(ctx, *param):
 
     if len(param) < 1:
         await ctx.send(notfound_live_string)
+    # TODO: Reject Unavailable Commands. (Currently, it just checks the number of params)
     elif len(param) == 1:   # 날짜 컷 입력 안했을경우 자동으로 3일 기반 데이터 사용 (즉, default = 3)
-        sorted_livedata = await sort_livedata(param[0], livestats3_list, comms_live_list)
-        await print_rankbased(ctx, sorted_livedata, 0, 9)
-    elif len(param) == 2:
+        sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)
+        await print_rankbased(ctx, sorted_data, 0, 9, True)
+    # TODO: Accept 'Day' commands (e.g. 실시간통계 순방 7)
+    elif len(param) == 2:   # 날짜 컷 입력 안했을경우 자동으로 3일 기반 데이터 사용 (즉, default = 3)
+        sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)
         return
+    # TODO: Add Full Stats search without Pick Rate Exclusion ---
+
     else:
         return
 

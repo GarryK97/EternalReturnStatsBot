@@ -11,6 +11,7 @@ from enum import IntEnum
 import tabulate
 import requests
 import asyncio
+from copy import deepcopy
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -245,7 +246,6 @@ async def fetch_all_livedata():
 
 
 async def sort_livedata(param, datalist, comms_list):
-    global PICKRATE_EXCLUSION
 
     if param == comms_list[LIVE_INDEX.PICKRATE]:
         datalist.sort(key=lambda x: x[LIVE_INDEX.PICKRATE], reverse=True)
@@ -260,20 +260,22 @@ async def sort_livedata(param, datalist, comms_list):
 # 특정 픽률보다 낮은 실험체는 통계에서 제외 (너무 적어서 무의미한 통계라고 판단 (주관적))
 # PICKRATE_EXCLSUION 보다 낮은 픽률은 모두 제외됨.
 async def exclude_lowpick(datalist):
-    datalist = [x for x in datalist if x[LIVE_INDEX.PICKRATE] >= PICKRATE_EXCLUSION]
-    return datalist
+    ex_datalist = [x for x in deepcopy(datalist) if x[LIVE_INDEX.PICKRATE] >= PICKRATE_EXCLUSION]
+    return ex_datalist
 
 
 async def print_rankbased(ctx, sorted_list, start, end, is_pick_excluded):
     if is_pick_excluded:
-        sorted_list = await exclude_lowpick(sorted_list)
+        output_list = await exclude_lowpick(sorted_list)
+    else:
+        output_list = sorted_list   # To prevent overwriting the global list
 
-    for i in range(len(sorted_list)):
-        sorted_list[i][LIVE_INDEX.PICKRATE] = str(round(sorted_list[i][LIVE_INDEX.PICKRATE] * 100, 1)) + '%'
-        sorted_list[i][LIVE_INDEX.WINRATE] = str(round(sorted_list[i][LIVE_INDEX.WINRATE] * 100, 1)) + '%'
-        sorted_list[i][LIVE_INDEX.TOPTHREE] = str(round(sorted_list[i][LIVE_INDEX.TOPTHREE] * 100, 1)) + '%'
+    for i in range(len(output_list)):
+        output_list[i][LIVE_INDEX.PICKRATE] = str(round(output_list[i][LIVE_INDEX.PICKRATE] * 100, 1)) + '%'
+        output_list[i][LIVE_INDEX.WINRATE] = str(round(output_list[i][LIVE_INDEX.WINRATE] * 100, 1)) + '%'
+        output_list[i][LIVE_INDEX.TOPTHREE] = str(round(output_list[i][LIVE_INDEX.TOPTHREE] * 100, 1)) + '%'
 
-    output = "```" + tabulate.tabulate(sorted_list[start:end+1], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1,end+2)) + "```"
+    output = "```" + tabulate.tabulate(output_list[start:end+1], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1,end+2)) + "```"
     if is_pick_excluded:
         output += f"**참고** 픽률 {int(PICKRATE_EXCLUSION * 100)}% 미만의 실험체는 제외한 결과입니다."
     await ctx.send(output)

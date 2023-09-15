@@ -25,13 +25,15 @@ comms_live_list = ["이름", "픽률", "승률", "순방"]    # The index can be
 comms_day_list = ['3', '7', '10']
 comms_live_param_list = ["제외", "전체"]
 
-comms_live_string = f"실시간통계 ({','.join(comms_live_list)}) ({','.join(comms_day_list)}) ({','.join(comms_day_list)})"
+comms_live_string =    f"명령어:" \
+                       f"\n 실시간통계 {comms_live_list} OR" \
+                       f"\n 실시간통계 {comms_live_list} {comms_day_list} OR" \
+                       f"\n 실시간통계 {comms_live_list} {comms_day_list} {comms_live_param_list}"
+
 comms_personal_string = "개인통계 닉네임"
 
-notfound_live_string = f"명령어 확인 불가" \
-                       f"\n명령어: 실시간통계 {comms_live_string} 또는" \
-                       f"\n 실시간통계 {comms_live_string} {comms_day_list} 또는" \
-                       f"\n 실시간통계 {comms_live_string} {comms_day_list} {comms_live_param_list}"
+notfound_live_string = f"명령어 확인 불가\n" \
+                       f"{comms_live_string}"
 
 notfound_personal_string = f"명령어 확인 불가\n명령어: {comms_personal_string}"
 
@@ -367,7 +369,7 @@ async def 실시간통계(ctx, *param):
     global livestats3_list, livestats7_list, livestats10_list
 
     if not await check_inputs(param, comms_live_list, comms_day_list, comms_live_param_list):
-        ctx.send(notfound_live_string)
+        await ctx.send(notfound_live_string)
         return
 
     # TODO: Reject Unavailable Commands. (Currently, it just checks the number of params)

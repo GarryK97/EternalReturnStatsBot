@@ -48,6 +48,13 @@ livestats3_list = []
 livestats7_list = []
 livestats10_list = []
 
+# Used to navigate user to the next page (e.g. Top 11 - 20)
+last_livestats = []
+last_livestats_startindex = -1
+last_isexcluded = False
+
+ROWS_PER_PAGE = 10
+
 PICKRATE_EXCLUSION = 0.01
 
 
@@ -262,7 +269,17 @@ async def exclude_lowpick(datalist):
     return ex_datalist
 
 
-async def print_rankbased(ctx, sorted_list, start, end, is_pick_excluded):
+async def beautify_output(output_list, start, end, is_pick_excluded):
+    output = "```" + tabulate.tabulate(output_list[start:end], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1, end+1)) + "```"
+    if is_pick_excluded:
+        output += f"**참고** 픽률 {int(PICKRATE_EXCLUSION * 100)}% 미만의 실험체는 제외한 결과입니다."
+
+    return output
+
+
+async def print_rankbased(ctx, sorted_list, start, is_pick_excluded):
+    global last_livestats, last_livestats_startindex, last_isexcluded, ROWS_PER_PAGE
+
     if is_pick_excluded:
         output_list = await exclude_lowpick(sorted_list)
     else:
@@ -273,10 +290,13 @@ async def print_rankbased(ctx, sorted_list, start, end, is_pick_excluded):
         output_list[i][LIVE_INDEX.WINRATE] = str(round(output_list[i][LIVE_INDEX.WINRATE] * 100, 1)) + '%'
         output_list[i][LIVE_INDEX.TOPTHREE] = str(round(output_list[i][LIVE_INDEX.TOPTHREE] * 100, 1)) + '%'
 
-    output = "```" + tabulate.tabulate(output_list[start:end+1], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1,end+2)) + "```"
-    if is_pick_excluded:
-        output += f"**참고** 픽률 {int(PICKRATE_EXCLUSION * 100)}% 미만의 실험체는 제외한 결과입니다."
+    output = await beautify_output(output_list, start, start+ROWS_PER_PAGE, is_pick_excluded)
     await ctx.send(output)
+
+    # Remembers the last list and index shown to the user for future use
+    last_livestats = output_list
+    last_livestats_startindex = start
+    last_isexcluded = is_pick_excluded
 
 # ----------------- 프로그램용 함수들 (끝) ----------------------
 
@@ -326,17 +346,34 @@ async def 명령어(ctx):
 
 
 @bot.command()
+async def 다음(ctx):
+    global last_livestats, last_livestats_startindex, last_isexcluded, ROWS_PER_PAGE
+
+    if last_livestats_startindex + ROWS_PER_PAGE > len(last_livestats):
+        await ctx.send("더이상 정보가 없습니다.")
+        return
+
+    last_livestats_startindex += ROWS_PER_PAGE
+    end = last_livestats_startindex + ROWS_PER_PAGE
+    if end >= len(last_livestats):
+        end = len(last_livestats)
+
+    output = await beautify_output(last_livestats, last_livestats_startindex, end, last_isexcluded)
+    await ctx.send(output)
+
+
+@bot.command()
 async def 실시간통계(ctx, *param):
     global livestats3_list, livestats7_list, livestats10_list
 
-    if not check_inputs(param, comms_live_list, comms_day_list, comms_live_param_list):
+    if not await check_inputs(param, comms_live_list, comms_day_list, comms_live_param_list):
         ctx.send(notfound_live_string)
         return
 
     # TODO: Reject Unavailable Commands. (Currently, it just checks the number of params)
     if len(param) == 1:   # 날짜 컷, 픽률제외 입력 안했을경우 자동으로 3일 기반 데이터 사용 및 픽률 제외
         sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)
-        await print_rankbased(ctx, sorted_data, 0, 9, True)
+        await print_rankbased(ctx, sorted_data, 0, True)
         return
 
     # TODO: Accept 'Day' commands (e.g. 실시간통계 순방 7)

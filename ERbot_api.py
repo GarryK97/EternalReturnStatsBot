@@ -27,6 +27,7 @@ comms_live_param_list = ["제외", "전체"]
 
 comms_live_string =    f"명령어:" \
                        f"\n 실시간통계 {comms_live_list} OR" \
+                       f"\n 실시간통계 {comms_live_list} {comms_live_param_list} OR" \
                        f"\n 실시간통계 {comms_live_list} {comms_day_list} OR" \
                        f"\n 실시간통계 {comms_live_list} {comms_day_list} {comms_live_param_list}"
 
@@ -286,7 +287,7 @@ async def print_rankbased(ctx, sorted_list, start, is_pick_excluded):
     if is_pick_excluded:
         output_list = await exclude_lowpick(sorted_list)
     else:
-        output_list = sorted_list   # To prevent overwriting the global list
+        output_list = deepcopy(sorted_list)   # To prevent overwriting the global list
 
     for i in range(len(output_list)):
         output_list[i][LIVE_INDEX.PICKRATE] = str(round(output_list[i][LIVE_INDEX.PICKRATE] * 100, 1)) + '%'
@@ -392,23 +393,31 @@ async def 다음(ctx):
 
 @bot.command()
 async def 실시간통계(ctx, *param):
-    global livestats3_list, livestats7_list, livestats10_list
+    global livestats3_list, livestats7_list, livestats10_list, comms_live_list, comms_day_list, comms_live_param_list
 
     # Input must be validated because the workings of the below codes assume that the inputs are all valid
-    if not await check_inputs(param, comms_live_list, comms_day_list, comms_live_param_list):
+    if not await check_inputs(param, comms_live_list, comms_day_list, comms_live_param_list) and \
+            not await check_inputs(param, comms_live_list, comms_live_param_list):
         await ctx.send(notfound_live_string)
         return
 
-    # TODO: Add Full stats search without Pick Rate Exclusion without specifying the 'day'
     if len(param) == 1:   # 날짜 컷, 픽률제외 입력 안했을경우 자동으로 3일 기반 데이터 사용 및 픽률 제외
         sorted_data = await sort_livedata(param[0], livestats3_list)
         await print_rankbased(ctx, sorted_data, 0, True)
         return
 
     elif len(param) == 2:   # 날짜 컷 입력 안했을경우 자동으로 3일 기반 데이터 사용 (즉, default = 3)
-        chosen_list = await select_livestats_day(param[1])
+        # If the user inputs 'day' as a parameter
+        if param[1] in comms_day_list:
+            chosen_list = await select_livestats_day(param[1])
+            is_pick_excluded = True
+        # else if the user inputs 'pick_exclusion' as a parameter
+        else:
+            chosen_list = livestats3_list
+            is_pick_excluded = await do_pick_exclusion(param[1])
+
         sorted_data = await sort_livedata(param[0], chosen_list)
-        await print_rankbased(ctx, sorted_data, 0, True)
+        await print_rankbased(ctx, sorted_data, 0, is_pick_excluded)
         return
 
     elif len(param) == 3:

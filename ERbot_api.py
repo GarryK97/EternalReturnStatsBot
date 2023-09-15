@@ -252,13 +252,14 @@ async def fetch_all_livedata():
     livestats10_list = await get_livestats("10")
 
 
-async def sort_livedata(param, datalist, comms_list):
+async def sort_livedata(param, datalist):
+    global comms_live_list
 
-    if param == comms_list[LIVE_INDEX.PICKRATE]:
+    if param == comms_live_list[LIVE_INDEX.PICKRATE]:
         datalist.sort(key=lambda x: x[LIVE_INDEX.PICKRATE], reverse=True)
-    elif param == comms_list[LIVE_INDEX.WINRATE]:
+    elif param == comms_live_list[LIVE_INDEX.WINRATE]:
         datalist.sort(key=lambda x: x[LIVE_INDEX.WINRATE], reverse=True)
-    elif param == comms_list[LIVE_INDEX.TOPTHREE]:
+    elif param == comms_live_list[LIVE_INDEX.TOPTHREE]:
         datalist.sort(key=lambda x: x[LIVE_INDEX.TOPTHREE], reverse=True)
 
     return datalist
@@ -300,10 +301,33 @@ async def print_rankbased(ctx, sorted_list, start, is_pick_excluded):
     last_livestats_startindex = start
     last_isexcluded = is_pick_excluded
 
+
+async def select_livestats_day(day):
+    global livestats3_list, livestats7_list, livestats10_list
+
+    chosen_list = livestats3_list
+    if day == '7':
+        chosen_list = livestats7_list
+    elif day == '10':
+        chosen_list = livestats10_list
+
+    return chosen_list
+
+
+async def do_pick_exclusion(pickinput):
+    global comms_live_param_list
+
+    if pickinput == comms_live_param_list[LIVE_PARAM_INDEX.EXCLUDE]:
+        return True
+    elif pickinput == comms_live_param_list[LIVE_PARAM_INDEX.INCLUDE]:
+        return False
+
+    raise Exception("Invalid Input for pick exclusion (do_pick_exclusion)")
+
 # ----------------- 프로그램용 함수들 (끝) ----------------------
 
 
-# ----------------- 봇 명령어 ------------------------
+# ----------------- 봇 명령어 관련 ------------------------
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
@@ -340,6 +364,8 @@ async def check_inputs(userparams, *comms_list):
     return True     # if the inputs are valid, the code will reach here
 
 
+# ----------------- 봇 명령어 ------------------------
+
 @bot.command()
 async def 명령어(ctx):
     all_commands_string = f"가능한 명령어\n{comms_live_string}\n{comms_personal_string}"
@@ -373,22 +399,23 @@ async def 실시간통계(ctx, *param):
         await ctx.send(notfound_live_string)
         return
 
+    # TODO: Add Full stats search without Pick Rate Exclusion without specifying the 'day'
     if len(param) == 1:   # 날짜 컷, 픽률제외 입력 안했을경우 자동으로 3일 기반 데이터 사용 및 픽률 제외
-        sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)
+        sorted_data = await sort_livedata(param[0], livestats3_list)
         await print_rankbased(ctx, sorted_data, 0, True)
         return
 
     elif len(param) == 2:   # 날짜 컷 입력 안했을경우 자동으로 3일 기반 데이터 사용 (즉, default = 3)
-        chosen_list = livestats3_list
-        if param[1] == '7':
-            chosen_list = livestats7_list
-        elif param[1] == '10':
-            chosen_list = livestats10_list
-
-        sorted_data = await sort_livedata(param[0], chosen_list, comms_live_list)
+        chosen_list = await select_livestats_day(param[1])
+        sorted_data = await sort_livedata(param[0], chosen_list)
         await print_rankbased(ctx, sorted_data, 0, True)
         return
-    # TODO: Add Full Stats search without Pick Rate Exclusion ---
+
+    elif len(param) == 3:
+        is_pick_excluded = await do_pick_exclusion(param[2])
+        chosen_list = await select_livestats_day(param[1])
+        sorted_data = await sort_livedata(param[0], chosen_list)
+        await print_rankbased(ctx, sorted_data, 0, is_pick_excluded)
 
     else:
         return

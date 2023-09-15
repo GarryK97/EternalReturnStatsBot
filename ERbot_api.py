@@ -25,10 +25,14 @@ comms_live_list = ["이름", "픽률", "승률", "순방"]    # The index can be
 comms_day_list = ['3', '7', '10']
 comms_live_param_list = ["제외", "전체"]
 
-comms_live_string = f"실시간통계 ({','.join(comms_live_list)}) ({','.join(comms_day_list)})"
+comms_live_string = f"실시간통계 ({','.join(comms_live_list)}) ({','.join(comms_day_list)}) ({','.join(comms_day_list)})"
 comms_personal_string = "개인통계 닉네임"
 
-notfound_live_string = f"명령어 확인 불가\n명령어: {comms_live_string}"
+notfound_live_string = f"명령어 확인 불가" \
+                       f"\n명령어: 실시간통계 {comms_live_string} 또는" \
+                       f"\n 실시간통계 {comms_live_string} {comms_day_list} 또는" \
+                       f"\n 실시간통계 {comms_live_string} {comms_day_list} {comms_live_param_list}"
+
 notfound_personal_string = f"명령어 확인 불가\n명령어: {comms_personal_string}"
 
 mainstats_addr = "https://er.dakgg.io/v1/"  # Main api address for getting statistics (DAK.GG API)
@@ -169,9 +173,9 @@ weapon_names_dict = \
 
 # ----------------- 프로그램용 함수들 ----------------------
 
-# --- 유저 입력 대기하고, 장기간 대기시 봇 종료
+# # 유저 입력 대기하고, 장기간 대기시 봇 종료
 # async def wait_for_user_content(ctx):
-#     timeout = 20
+#     timeout = 10
 #
 #     def check(m):
 #         return m.author == ctx.message.author and m.channel == ctx.message.channel
@@ -229,12 +233,6 @@ async def get_livestats(day):
             processed_data.append([name, pickrate, winrate, topthree])
 
     return processed_data
-
-
-# async def check_input(userinput, comms_list):
-#     if userinput not in comms_list:
-#         return False
-#     return True
 
 
 async def fetch_all_livedata():
@@ -303,9 +301,27 @@ async def before_my_task():
     await bot.wait_until_ready()  # wait until the bot logs in
 
 
+# Helper function to check valid inputs
+async def check_inputs(userparams, *comms_list):
+    """
+    :condition length of userparams and comms_list must match.
+    :param userparams: input from the user (Type: List)
+    :param comms_list: list of commands that will validate the inputs (Type: List)
+    """
+    if len(userparams) < 1:
+        return False
+    else:
+        for i in range(len(userparams)):
+            if userparams[i] not in comms_list[i]:
+                return False
+
+    return True     # if the inputs are valid, the code will reach here
+
+
 @bot.command()
 async def 명령어(ctx):
-    await ctx.send(comms_live_string)
+    all_commands_string = f"가능한 명령어\n{comms_live_string}\n{comms_personal_string}"
+    await ctx.send(all_commands_string)
     return
 
 
@@ -313,12 +329,16 @@ async def 명령어(ctx):
 async def 실시간통계(ctx, *param):
     global livestats3_list, livestats7_list, livestats10_list
 
-    if len(param) < 1:
-        await ctx.send(notfound_live_string)
+    if not check_inputs(param, comms_live_list, comms_day_list, comms_live_param_list):
+        ctx.send(notfound_live_string)
+        return
+
     # TODO: Reject Unavailable Commands. (Currently, it just checks the number of params)
-    elif len(param) == 1:   # 날짜 컷 입력 안했을경우 자동으로 3일 기반 데이터 사용 (즉, default = 3)
+    if len(param) == 1:   # 날짜 컷, 픽률제외 입력 안했을경우 자동으로 3일 기반 데이터 사용 및 픽률 제외
         sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)
         await print_rankbased(ctx, sorted_data, 0, 9, True)
+        return
+
     # TODO: Accept 'Day' commands (e.g. 실시간통계 순방 7)
     elif len(param) == 2:   # 날짜 컷 입력 안했을경우 자동으로 3일 기반 데이터 사용 (즉, default = 3)
         sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)

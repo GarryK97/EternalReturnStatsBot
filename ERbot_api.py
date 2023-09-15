@@ -368,19 +368,25 @@ async def 다음(ctx):
 async def 실시간통계(ctx, *param):
     global livestats3_list, livestats7_list, livestats10_list
 
+    # Input must be validated because the workings of the below codes assume that the inputs are all valid
     if not await check_inputs(param, comms_live_list, comms_day_list, comms_live_param_list):
         await ctx.send(notfound_live_string)
         return
 
-    # TODO: Reject Unavailable Commands. (Currently, it just checks the number of params)
     if len(param) == 1:   # 날짜 컷, 픽률제외 입력 안했을경우 자동으로 3일 기반 데이터 사용 및 픽률 제외
         sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)
         await print_rankbased(ctx, sorted_data, 0, True)
         return
 
-    # TODO: Accept 'Day' commands (e.g. 실시간통계 순방 7)
     elif len(param) == 2:   # 날짜 컷 입력 안했을경우 자동으로 3일 기반 데이터 사용 (즉, default = 3)
-        sorted_data = await sort_livedata(param[0], livestats3_list, comms_live_list)
+        chosen_list = livestats3_list
+        if param[1] == '7':
+            chosen_list = livestats7_list
+        elif param[1] == '10':
+            chosen_list = livestats10_list
+
+        sorted_data = await sort_livedata(param[0], chosen_list, comms_live_list)
+        await print_rankbased(ctx, sorted_data, 0, True)
         return
     # TODO: Add Full Stats search without Pick Rate Exclusion ---
 

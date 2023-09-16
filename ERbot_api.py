@@ -506,7 +506,7 @@ async def 팀원(ctx):
             continue
 
         DRIVER.get("https://dak.gg/er/players/" + nickname + f"?teamMode=SQUAD&season={CURRENT_SEASON}")
-        update_button = DRIVER.find_element(By.CSS_SELECTOR, "#content-container > header > div > div.flex.w-full.flex-col.items-start.py-\[8px\].sm\:py-0 > div.mb-\[6px\].flex.h-\[40px\].items-center.gap-x-\[5px\].text-\[14px\] > button.h-full.px-\[12px\].font-bold.text-white.bg-\[\#007bff\]")
+        update_button = DRIVER.find_element(By.XPATH, "//*[@id=\"content-container\"]/header/div/div[2]/div[2]/button[1]")
         update_button.click()
         await asyncio.sleep(1)
 

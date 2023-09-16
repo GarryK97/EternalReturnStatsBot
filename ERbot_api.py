@@ -9,13 +9,19 @@ from dotenv import load_dotenv
 import os
 from enum import IntEnum
 import tabulate
+import wcwidth
 import requests
 import asyncio
 from copy import deepcopy
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+client = discord.Client(intents=intents)
 load_dotenv('config.env')
 
 # ---------------- 명령어 및 기본 변수 정리 ---------------------------
@@ -38,18 +44,22 @@ notfound_live_string = f"명령어 확인 불가\n" \
 
 notfound_personal_string = f"명령어 확인 불가\n명령어: {comms_personal_string}"
 
-mainstats_addr = "https://er.dakgg.io/v1/"  # Main api address for getting statistics (DAK.GG API)
-livestats_addr = "statistics/realtime?teamMode=SQUAD&type=REALTIME_OVER_DIAMOND&period=DAYS"
-personal_addr = "players/"
+dakgg_addr = "https://er.dakgg.io/v1/"  # Main api address for getting statistics (DAK.GG API)
+dakgg_livestats_addr = "statistics/realtime?teamMode=SQUAD&type=REALTIME_OVER_DIAMOND&period=DAYS"
+dakgg_personal_addr = "players/"
 
-mainapi_addr = "https://open-api.bser.io/v1/"   # Official api address
-mainapi_headers = {'x-api-key': os.getenv('API_KEY')}  # API Key header
+officialapi_addr = "https://open-api.bser.io/v1/"   # Official api address
+officialapi_headers = {'x-api-key': os.getenv('API_KEY')}  # API Key header
 
 
 # 이름, 픽률, 승률, 순방 순서로 정리됨
+# Only used to display total statistics (e.g. TOP10 subjects)
 livestats3_list = []
 livestats7_list = []
 livestats10_list = []
+
+# Used to quickly access data
+subjects_data_dict = {}
 
 # Used to navigate user to the next page (e.g. Top 11 - 20)
 last_livestats = []
@@ -59,6 +69,8 @@ last_isexcluded = False
 ROWS_PER_PAGE = 10
 
 PICKRATE_EXCLUSION = 0.01
+
+CURRENT_SEASON = "SEASON_10"      # Official season 1 id
 
 
 # Enum class for comms_live_list (The index must match with the list)
@@ -79,6 +91,16 @@ class DAY_INDEX(IntEnum):
 class LIVE_PARAM_INDEX(IntEnum):
     EXCLUDE = 0
     INCLUDE = 1
+
+
+class SUBJECT_DATA_INDEX(IntEnum):
+    NAME = 0
+    WINRATE = 1
+    PICKRATE = 2
+    AVG_PLACEMENT = 3
+    AVG_DAMAGE = 4
+    AVG_KILLS = 5
+
 
 
 character_names_dict = \
@@ -165,6 +187,7 @@ weapon_names_dict = \
         9:"권총",
         10:"돌격소총",
         11:"저격총",
+        12:"None",
         13:"망치",
         14:"도끼",
         15:"단검",
@@ -183,35 +206,11 @@ weapon_names_dict = \
 
 # ----------------- 프로그램용 함수들 ----------------------
 
-# # 유저 입력 대기하고, 장기간 대기시 봇 종료
-# async def wait_for_user_content(ctx):
-#     timeout = 10
-#
-#     def check(m):
-#         return m.author == ctx.message.author and m.channel == ctx.message.channel
-#
-#     try:
-#         user_input = await bot.wait_for('message', check=check, timeout=timeout)
-#         return user_input.content
-#     except asyncio.exceptions.TimeoutError:
-#         await ctx.send("장기간 대기하여 종료합니다")
-#         return ""
-
-
-# #--- JSON 데이터 업데이트용 함수
-# async def update_json(ctx, dict_data, response):
-#     try:
-#         with open('data.json', 'w', encoding='utf-8') as newf:
-#             json.dump(dict_data, newf, indent=2, ensure_ascii=False)
-#         await ctx.send(response)
-#     except:
-#         await ctx.send("!!데이터 수정중 오류가 발생했습니다!!")
-
-@tasks.loop(minutes=60)
+@tasks.loop(minutes=30)
 async def get_livestats(day):
-    global mainstats_addr, livestats_addr
+    global dakgg_addr, dakgg_livestats_addr, subjects_data_dict
 
-    stats_url = mainstats_addr + livestats_addr + day
+    stats_url = dakgg_addr + dakgg_livestats_addr + day
 
     response = requests.get(stats_url)
     tries = 0
@@ -242,11 +241,24 @@ async def get_livestats(day):
             topthree = row.get("top3Count") / pick_count
             processed_data.append([name, pickrate, winrate, topthree])
 
+        # Stores subject specific data in separated dictionary
+        cid = row.get("characterId")
+        avg_placement = round(row.get("avgPlacement"), 1)
+        avg_damage = int(round(row.get("avgDamageToPlayer")))
+        avg_kills = round(row.get("avgPlayerKill"), 1)
+
+        if not subjects_data_dict.get(cid):
+            subjects_data_dict[cid] = [subject_name, winrate, pickrate, avg_placement, avg_damage, avg_kills]
+        else:
+            # Only stores the major weapon type data for characters
+            if pickrate > subjects_data_dict[cid][SUBJECT_DATA_INDEX.PICKRATE]:
+                subjects_data_dict[cid] = [subject_name, winrate, pickrate, avg_placement, avg_damage, avg_kills]
+
     return processed_data
 
 
 async def fetch_all_livedata():
-    global livestats3_list, livestats7_list, livestats10_list, livestats_addr
+    global livestats3_list, livestats7_list, livestats10_list, dakgg_livestats_addr
 
     livestats3_list = await get_livestats("3")
     livestats7_list = await get_livestats("7")
@@ -274,7 +286,7 @@ async def exclude_lowpick(datalist):
 
 
 async def beautify_output(output_list, start, end, is_pick_excluded):
-    output = "```" + tabulate.tabulate(output_list[start:end], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', stralign='left', showindex=range(start+1, end+1)) + "```"
+    output = "```" + tabulate.tabulate(output_list[start:end], headers=["실험체", "픽률", "승률", "순방"], tablefmt='simple', rowalign='left', showindex=range(start+1, end+1)) + "```"
     if is_pick_excluded:
         output += f"**참고** 픽률 {int(PICKRATE_EXCLUSION * 100)}% 미만의 실험체는 제외한 결과입니다."
 
@@ -324,6 +336,38 @@ async def do_pick_exclusion(pickinput):
         return False
 
     raise Exception("Invalid Input for pick exclusion (do_pick_exclusion)")
+
+
+# async def get_tier(mmr, rank):
+#     if rank <= 200:
+#         return "이터니티"
+#     elif rank <= 700:
+#         return "데미갓"
+#
+#     tier = "아이언"
+#     if mmr >= 6000:
+#         tier = "미스릴"
+#     elif mmr >= 5000:
+#         tier = "다이아몬드"
+#     elif mmr >= 4000:
+#         tier = "플레티넘"
+#     elif mmr >= 3000:
+#         tier = "골드"
+#     elif mmr >= 2000:
+#         tier = "실버"
+#     elif mmr >= 1000:
+#         tier = "브론즈"
+#
+#     division = "4"
+#     division_mmr = mmr % 1000
+#     if division_mmr >= 750:
+#         division = "3"
+#     elif division_mmr >= 500:
+#         division = "2"
+#     elif division_mmr >= 250:
+#         division = "1"
+#
+#     return tier + " " + division
 
 # ----------------- 프로그램용 함수들 (끝) ----------------------
 
@@ -428,6 +472,54 @@ async def 실시간통계(ctx, *param):
 
     else:
         return
+
+# async def 팀원(ctx)
+
+
+@bot.command()
+async def 팀원(ctx):
+    global CURRENT_SEASON
+
+    teammates = []
+    await ctx.send("팀원들의 닉네임을 입력받습니다. 한명씩 입력해주세요 (쓰기힘들거나 비우고싶은경우 'ㄴ' 입력)")
+
+    def check(m):
+        return m.channel == ctx.channel and m.author == ctx.author
+
+    msg = await bot.wait_for("message", check=check, timeout=15)
+    if (msg.content != 'ㄴ'):
+        teammates.append(msg.content)
+    msg = await bot.wait_for("message", check=check, timeout=15)
+    if (msg.content != 'ㄴ'):
+        teammates.append(msg.content)
+
+    chrome_options = Options()
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.implicitly_wait(10)
+
+    for nickname in teammates:
+        user_addr = dakgg_addr + dakgg_personal_addr + nickname + f"?teamMode=SQUAD&season={CURRENT_SEASON}"
+        asd = requests.get(user_addr).text
+        if asd == '{}':
+            await ctx.send(f"입력하신 {nickname} 은 존재하지않습니다. 다시 확인해주세요.")
+            continue
+
+        driver.get("https://dak.gg/er/players/" + nickname + f"?teamMode=SQUAD&season={CURRENT_SEASON}")
+        update_button = driver.find_element(By.XPATH, "//*[@id=\"content-container\"]/header/div/div[2]/div[2]/button[1]")
+        update_button.click()
+        await asyncio.sleep(1)
+
+        userstats_json = requests.get(user_addr).json()
+        mostplayed_char_id = int(userstats_json.get("mostPlayedCharacter").get("characterId"))
+        mostplayed_char_name = character_names_dict[mostplayed_char_id]
+        user_tier = userstats_json.get("teamModeSummary")[2].get("playerTier").get("name")
+        user_lp = userstats_json.get("teamModeSummary")[2].get("playerTier").get("lp")
+
+        await ctx.send(f"{nickname}\n"
+                       f"티어 : {user_tier} - {user_lp} 포인트\n"
+                       f"모스트 : {mostplayed_char_name}\n")
 
 
 # ----------------- 봇 명령어 (끝) ------------------------

@@ -24,6 +24,13 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 client = discord.Client(intents=intents)
 load_dotenv('config.env')
 
+chrome_options = Options()
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--disable-dev-shm-usage')
+chrome_options.add_argument('headless')
+DRIVER = webdriver.Chrome(options=chrome_options)
+DRIVER.implicitly_wait(10)
+
 # ---------------- 명령어 및 기본 변수 정리 ---------------------------
 
 # 새 명령어 추가시 이 리스트들도 수정필수
@@ -473,12 +480,10 @@ async def 실시간통계(ctx, *param):
     else:
         return
 
-# async def 팀원(ctx)
-
 
 @bot.command()
 async def 팀원(ctx):
-    global CURRENT_SEASON
+    global CURRENT_SEASON, DRIVER
 
     teammates = []
     await ctx.send("팀원들의 닉네임을 입력받습니다. 한명씩 입력해주세요 (쓰기힘들거나 비우고싶은경우 'ㄴ' 입력)")
@@ -493,12 +498,6 @@ async def 팀원(ctx):
     if (msg.content != 'ㄴ'):
         teammates.append(msg.content)
 
-    chrome_options = Options()
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(options=chrome_options)
-    driver.implicitly_wait(10)
-
     for nickname in teammates:
         user_addr = dakgg_addr + dakgg_personal_addr + nickname + f"?teamMode=SQUAD&season={CURRENT_SEASON}"
         asd = requests.get(user_addr).text
@@ -506,8 +505,8 @@ async def 팀원(ctx):
             await ctx.send(f"입력하신 {nickname} 은 존재하지않습니다. 다시 확인해주세요.")
             continue
 
-        driver.get("https://dak.gg/er/players/" + nickname + f"?teamMode=SQUAD&season={CURRENT_SEASON}")
-        update_button = driver.find_element(By.XPATH, "//*[@id=\"content-container\"]/header/div/div[2]/div[2]/button[1]")
+        DRIVER.get("https://dak.gg/er/players/" + nickname + f"?teamMode=SQUAD&season={CURRENT_SEASON}")
+        update_button = DRIVER.find_element(By.CSS_SELECTOR, "#content-container > header > div > div.flex.w-full.flex-col.items-start.py-\[8px\].sm\:py-0 > div.mb-\[6px\].flex.h-\[40px\].items-center.gap-x-\[5px\].text-\[14px\] > button.h-full.px-\[12px\].font-bold.text-white.bg-\[\#007bff\]")
         update_button.click()
         await asyncio.sleep(1)
 

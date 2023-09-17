@@ -345,6 +345,15 @@ async def do_pick_exclusion(pickinput):
     raise Exception("Invalid Input for pick exclusion (do_pick_exclusion)")
 
 
+async def updown_str(num):
+    if num > 0:
+        return str(num) + " ▲"
+    if num < 0:
+        return str(num) + " ▽"
+    else:
+        return str(num) + " ="
+
+
 # async def get_tier(mmr, rank):
 #     if rank <= 200:
 #         return "이터니티"
@@ -511,14 +520,44 @@ async def 팀원(ctx):
         await asyncio.sleep(1)
 
         userstats_json = requests.get(user_addr).json()
-        mostplayed_char_id = int(userstats_json.get("mostPlayedCharacter").get("characterId"))
-        mostplayed_char_name = character_names_dict[mostplayed_char_id]
         user_tier = userstats_json.get("teamModeSummary")[2].get("playerTier").get("name")
         user_lp = userstats_json.get("teamModeSummary")[2].get("playerTier").get("lp")
 
-        await ctx.send(f"{nickname}\n"
-                       f"티어 : {user_tier} - {user_lp} 포인트\n"
-                       f"모스트 : {mostplayed_char_name}\n")
+        mostplayed_chars_string = f"\n**안내**:[]안의 값은 전체 실험체 평균값과 비교한 결과입니다.\n"
+        mostplayed_charstats = userstats_json.get("characterSummary")
+        max_range = 3 if len(mostplayed_charstats) >= 3 else len(mostplayed_charstats)
+        for i in range(max_range):
+            mostplayed_stats = mostplayed_charstats[i]
+            mostplayed_char_id = int(mostplayed_stats.get("characterId"))
+            mostplayed_char_name = character_names_dict[mostplayed_char_id]
+            mostplayed_pick_num = mostplayed_stats.get("pickCount")
+            mostplayed_win_rate = mostplayed_stats.get("winRate")
+            mostplayed_avg_place = mostplayed_stats.get("avgPlacement")
+            mostplayed_avg_damage = mostplayed_stats.get("avgDamageToPlayer")
+            mostplayed_avg_kills = mostplayed_stats.get("avgPlayerKill")
+
+            subject_livestat = subjects_data_dict[mostplayed_char_id]
+            diff_win_rate = round((mostplayed_win_rate - subject_livestat[SUBJECT_DATA_INDEX.WINRATE]) * 100, 1)  # *100 = converts to percentile
+            diff_avg_place = round(mostplayed_avg_place - subject_livestat[SUBJECT_DATA_INDEX.AVG_PLACEMENT], 1)
+            diff_avg_damage = round(mostplayed_avg_damage - subject_livestat[SUBJECT_DATA_INDEX.AVG_DAMAGE])
+            diff_avg_kills = round(mostplayed_avg_kills - subject_livestat[SUBJECT_DATA_INDEX.AVG_KILLS], 1)
+
+            display_win_rate = round(mostplayed_win_rate * 100, 1)
+            display_avg_place = round(mostplayed_avg_place, 1)
+            display_avg_damage = round(mostplayed_avg_damage)
+            display_avg_kills = round(mostplayed_avg_kills, 1)
+
+            mostplayed_chars_string += f"{i+1}. **{mostplayed_char_name}** {mostplayed_pick_num}게임\n" \
+                                       f"--- 승률:{display_win_rate}% *[{await updown_str(diff_win_rate)}]* | " \
+                                       f"--- 평균 순위:{display_avg_place} *[{await updown_str(diff_avg_place)}]* | " \
+                                       f"--- 평균 데미지:{display_avg_damage} *[{await updown_str(diff_avg_damage)}]* | " \
+                                       f"--- 평균 킬:{display_avg_kills} *[{await updown_str(diff_avg_kills)}]*\n"
+
+        await ctx.send(f"\n--------------------------------------------------------------------------------------------\n"
+                       f"**{nickname}**\n"
+                       f"**{user_tier} - {user_lp} 포인트**\n" +
+                       mostplayed_chars_string +
+                       f"\n--------------------------------------------------------------------------------------------\n")
 
 
 # ----------------- 봇 명령어 (끝) ------------------------
